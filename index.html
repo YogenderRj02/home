@@ -343,6 +343,11 @@
   @media(max-width:380px){
     .grid-4{ grid-template-columns:1fr; }
   }
+
+  /* ---------- NEW: detail modals / clickable ---------- */
+  .ld-edit input{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;background:#fffdf7;}
+  .stat-card.clickable{cursor:pointer;}
+  .name-link{cursor:pointer;text-decoration:underline dotted;}
 </style>
 </head>
 <body>
@@ -504,7 +509,7 @@
             <div class="lbl" style="margin-bottom:6px;">Active Majdoor</div>
             <div class="amt mono" id="farmDashLaborers" style="font-size:20px;">0</div>
           </div>
-          <div class="stat-card" style="padding:0;">
+          <div class="stat-card clickable" style="padding:0;" onclick="openCottonAll()">
             <div class="lbl" style="margin-bottom:6px;">Is Mahine Kapas</div>
             <div class="amt mono" id="farmDashCotton" style="font-size:20px; color:var(--indigo);">0 kg</div>
           </div>
@@ -557,7 +562,7 @@
           <div class="lbl">Active Majdoor</div>
           <div class="amt mono" id="farmStatLaborers">0</div>
         </div>
-        <div class="card stat-card">
+        <div class="card stat-card clickable" onclick="openCottonAll()">
           <div class="seal" style="border-color:var(--mustard); color:#6B4A0E;">☁️</div>
           <div class="lbl">Is Mahine Kapas</div>
           <div class="amt mono" id="farmStatCotton" style="color:var(--indigo);">0 kg</div>
@@ -618,8 +623,9 @@
           <div class="card">
             <div class="section-title" id="cottonFormTitle">Kapas Tudai Jodo</div>
             <div class="field"><label>Majdoor</label><select id="cottonLaborer"></select></div>
+            <div class="field"><label>Product</label><select id="cottonProduct" onchange="onProductChange()"></select></div>
             <div class="field"><label>Tareekh</label><input type="date" id="cottonDate"></div>
-            <div class="field"><label>Kapas (kg)</label><input type="number" id="cottonWeight" placeholder="e.g. 25" min="0" step="0.01" oninput="updateCottonPreview()"></div>
+            <div class="field"><label>Weight (kg)</label><input type="number" id="cottonWeight" placeholder="e.g. 25" min="0" step="0.01" oninput="updateCottonPreview()"></div>
             <div class="field"><label>Rate (₹ per kg)</label><input type="number" id="cottonRate" placeholder="e.g. 70" min="0" step="0.01" oninput="updateCottonPreview()"></div>
             <div class="field">
               <label>Kul Rashi</label>
@@ -803,6 +809,16 @@
           <button class="btn btn-mustard" onclick="saveDefaultCottonRate()">Save Karein</button>
         </div>
       </div>
+
+      <div class="card" style="margin-top:18px;">
+        <div class="section-title">⚖️ Kg Wale Products <span class="tag">kapas ke alawa · rate yahin set hoga</span></div>
+        <div id="kgProductList"></div>
+        <div class="inline-add">
+          <input type="text" id="newProdName" placeholder="Product (e.g. Moongfali)">
+          <input type="number" id="newProdRate" placeholder="Rate ₹/kg" style="max-width:130px;">
+          <button class="btn btn-mustard btn-sm" onclick="addKgProduct()">Jodo</button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -897,6 +913,31 @@
   </div>
 </div>
 
+<!-- MAJDOOR DETAIL MODAL -->
+<div class="modal-bg" id="laborerDetailBg">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-close" onclick="closeLaborerDetail()">✕</button>
+    <h2 id="ldTitle">Majdoor</h2>
+    <div id="ldSummary" style="font-size:13px;margin-bottom:14px;"></div>
+    <div class="toggle-row">
+      <div class="toggle-btn" id="ldBtn_work" onclick="ldTab('work')">🧑‍🌾 Kaam</div>
+      <div class="toggle-btn" id="ldBtn_cotton" onclick="ldTab('cotton')">⚖️ Tudai</div>
+      <div class="toggle-btn" id="ldBtn_payment" onclick="ldTab('payment')">💵 Payment</div>
+    </div>
+    <div id="ldBody"></div>
+  </div>
+</div>
+
+<!-- KAPAS / TUDAI POORA RECORD MODAL -->
+<div class="modal-bg" id="cottonAllBg">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-close" onclick="closeCottonAll()">✕</button>
+    <h2>Kapas / Tudai Ka Poora Record</h2>
+    <div id="caSummary" style="font-size:13px;margin-bottom:14px;"></div>
+    <div id="caBody"></div>
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="modal-bg" id="confirmModalBg">
   <div class="modal" style="max-width:380px;">
@@ -947,6 +988,8 @@ let budgets = {};
 let unsubUsers=null, unsubUser=null, unsubTxns=null, unsubCats=null, unsubIncomeCats=null, unsubBudgets=null;
 let unsubLaborers=null, unsubFarmWork=null, unsubCottonPicks=null, unsubFarmPayments=null, unsubFarmSettings=null;
 let unsubLoans=null, unsubLoanPayments=null;
+let kgProducts=[], unsubProducts=null;
+let detailLaborerId=null, detailTab='work', detailEdit=null, cottonAllOpen=false;
 let currentTxnType = 'expense';
 let editId = null;
 let confirmCallback = null;
@@ -1166,7 +1209,7 @@ function updateClock(){
 }
 
 function cleanupListeners(){
-  [unsubUsers,unsubUser,unsubTxns,unsubCats,unsubIncomeCats,unsubBudgets,unsubLaborers,unsubFarmWork,unsubCottonPicks,unsubFarmPayments,unsubFarmSettings,unsubLoans,unsubLoanPayments].forEach(u=>{ if(u) u(); });
+  [unsubUsers,unsubUser,unsubTxns,unsubCats,unsubIncomeCats,unsubBudgets,unsubLaborers,unsubFarmWork,unsubCottonPicks,unsubFarmPayments,unsubFarmSettings,unsubLoans,unsubLoanPayments,unsubProducts].forEach(u=>{ if(u) u(); });
 }
 
 function bootApp(){
@@ -1239,7 +1282,12 @@ function bootApp(){
     farmSettings = snap.exists() ? snap.data() : {cottonRate:0};
     const inp = document.getElementById('defaultCottonRateInput');
     if(inp && document.activeElement!==inp) inp.value = farmSettings.cottonRate || '';
+    populateProductSelect(); renderKgProducts();
     applyDefaultCottonRate();
+  });
+  unsubProducts = onSnapshot(query(collection(db,'kgProducts'), orderBy('name')), (snap)=>{
+    kgProducts=[]; snap.forEach(d=>kgProducts.push({id:d.id,...d.data()}));
+    populateProductSelect(); renderKgProducts(); applyDefaultCottonRate();
   });
 
   unsubLoans = onSnapshot(query(collection(db,'loans'), orderBy('date','desc')), (snap)=>{
@@ -1640,10 +1688,10 @@ function renderLaborers(){
     const dueBadge = t.due>0 ? `<span class="due-badge pending">Baaki ${fmtMoney(t.due)}</span>` : (t.earned>0 ? `<span class="due-badge paid">Poora Paid</span>` : `<span class="due-badge paid" style="background:var(--paper-2); color:var(--muted);">Koi kaam nahi</span>`);
     const pct = t.earned>0 ? Math.min(100, (t.paid/t.earned*100)) : 0;
     return `<div class="labor-row">
-      <div class="avatar" style="background:${colorForName(l.name)}; color:#fff; flex-shrink:0;">${initials(l.name)}</div>
+      <div class="avatar" style="background:${colorForName(l.name)}; color:#fff; flex-shrink:0; cursor:pointer;" onclick="openLaborerDetail('${l.id}')">${initials(l.name)}</div>
       <div style="flex:1; min-width:150px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-          <b style="font-size:14.5px;">${l.name}</b>
+          <b class="name-link" style="font-size:14.5px;" onclick="openLaborerDetail('${l.id}')">${l.name}</b>
           ${dueBadge}
         </div>
         <div style="font-size:12px; color:var(--muted); margin-top:3px;">Kamaya <span class="mono">${fmtMoney(t.earned)}</span> · Mila <span class="mono">${fmtMoney(t.paid)}</span>${l.phone ? ` · ${l.phone}` : ''}</div>
@@ -1657,6 +1705,7 @@ function renderLaborers(){
     </div>`;
   }).join('') : `<div class="empty"><div class="ic">🧑‍🌾</div>Abhi koi majdoor nahi jode gaye hain — upar se pehla majdoor jodein.</div>`;
   targets.forEach(el=>{ el.innerHTML = html; });
+  refreshDetails();
 }
 
 // ---- Work Log ----
@@ -1726,14 +1775,56 @@ window.saveDefaultCottonRate = async function(){
   await setDoc(doc(db,'settings','farmConfig'), {cottonRate: val}, {merge:true});
   toast('Default kapas rate save ho gaya ✓');
 }
+
+// ---- Kg wale products (kapas ke alawa) ----
+function allProducts(){ return [{name:'Kapas', rate:farmSettings.cottonRate||0}, ...kgProducts]; }
+function populateProductSelect(){
+  const el=document.getElementById('cottonProduct'); if(!el) return;
+  const prev=el.value;
+  el.innerHTML = allProducts().map(p=>`<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`).join('');
+  if(prev && [...el.options].some(o=>o.value===prev)) el.value=prev;
+}
+window.onProductChange = function(){
+  if(editCottonId) return;
+  const p = allProducts().find(x=>x.name===document.getElementById('cottonProduct').value);
+  document.getElementById('cottonRate').value = (p && p.rate) ? p.rate : '';
+  updateCottonPreview();
+}
 function applyDefaultCottonRate(){
   if(editCottonId) return;
-  const el = document.getElementById('cottonRate');
-  if(el && !el.value && farmSettings.cottonRate){
-    el.value = farmSettings.cottonRate;
-    updateCottonPreview();
-  }
+  const el=document.getElementById('cottonRate');
+  if(el && !el.value) onProductChange();
 }
+function renderKgProducts(){
+  const el=document.getElementById('kgProductList'); if(!el) return;
+  el.innerHTML = kgProducts.length ? kgProducts.map(p=>`
+    <div class="member-row">
+      <b style="flex:1;min-width:100px;">${escapeHtml(p.name)}</b>
+      <input type="number" id="prodRate_${p.id}" value="${p.rate||''}" placeholder="₹/kg" style="width:90px;padding:8px;border:1.5px solid var(--line);border-radius:7px;">
+      <button class="btn btn-outline btn-sm" onclick="saveKgProductRate('${p.id}')">Rate Save</button>
+      <button class="txn-action-btn del" title="Hatao" onclick="delKgProduct('${p.id}','${escapeAttr(p.name)}')">✕</button>
+    </div>`).join('') : `<div class="empty" style="padding:14px 0;">Abhi sirf Kapas hai. Naya product jodein.</div>`;
+}
+window.addKgProduct = async function(){
+  const name=document.getElementById('newProdName').value.trim();
+  const rate=parseFloat(document.getElementById('newProdRate').value)||0;
+  if(!name){ toast('Product ka naam likhein.'); return; }
+  if(allProducts().some(p=>p.name.toLowerCase()===name.toLowerCase())){ toast('Ye product pehle se hai.'); return; }
+  await addDoc(collection(db,'kgProducts'), {name, rate, createdAt: serverTimestamp()});
+  document.getElementById('newProdName').value=''; document.getElementById('newProdRate').value='';
+  toast('Product jud gaya ✓');
+}
+window.saveKgProductRate = async function(id){
+  const rate=parseFloat(document.getElementById('prodRate_'+id).value)||0;
+  await updateDoc(doc(db,'kgProducts',id), {rate});
+  toast('Rate save ho gaya ✓');
+}
+window.delKgProduct = function(id,name){
+  openConfirm(`"${name}" product hataana hai? Purane records par naam waisa hi rahega.`, async ()=>{
+    await deleteDoc(doc(db,'kgProducts',id)); toast('Hata diya gaya ✓');
+  });
+}
+
 window.updateCottonPreview = function(){
   const w = parseFloat(document.getElementById('cottonWeight').value)||0;
   const r = parseFloat(document.getElementById('cottonRate').value)||0;
@@ -1742,21 +1833,22 @@ window.updateCottonPreview = function(){
 window.saveCottonPick = async function(){
   const laborerId = document.getElementById('cottonLaborer').value;
   const laborerName = laborers.find(l=>l.id===laborerId)?.name || '';
+  const product = document.getElementById('cottonProduct').value || 'Kapas';
   const date = document.getElementById('cottonDate').value || todayStr();
   const weightKg = parseFloat(document.getElementById('cottonWeight').value);
   const ratePerKg = parseFloat(document.getElementById('cottonRate').value);
   const note = document.getElementById('cottonNote').value.trim();
   if(!laborerId){ toast('Pehle majdoor jodein ya chunein.'); return; }
-  if(!weightKg || weightKg<=0){ toast('Kapas ka weight (kg) daalein.'); return; }
+  if(!weightKg || weightKg<=0){ toast('Weight (kg) daalein.'); return; }
   if(!ratePerKg || ratePerKg<=0){ toast('Rate per kg daalein.'); return; }
   const amount = Math.round(weightKg*ratePerKg*100)/100;
   try{
     if(editCottonId){
-      await updateDoc(doc(db,'cottonPicks',editCottonId), {laborerId, laborerName, date, weightKg, ratePerKg, amount, note});
+      await updateDoc(doc(db,'cottonPicks',editCottonId), {laborerId, laborerName, product, date, weightKg, ratePerKg, amount, note});
       toast('Tudai record update ho gaya ✓');
     } else {
-      await addDoc(collection(db,'cottonPicks'), {laborerId, laborerName, date, weightKg, ratePerKg, amount, note, createdBy:currentUser.uid, createdAt: serverTimestamp()});
-      toast('Kapas tudai jud gayi ✓');
+      await addDoc(collection(db,'cottonPicks'), {laborerId, laborerName, product, date, weightKg, ratePerKg, amount, note, createdBy:currentUser.uid, createdAt: serverTimestamp()});
+      toast('Tudai record jud gaya ✓');
     }
     cancelCottonEdit();
   }catch(e){ toast('Save nahi hua: '+e.message); }
@@ -1765,6 +1857,7 @@ window.editCottonPick = function(id){
   const c = cottonPicks.find(x=>x.id===id); if(!c) return;
   editCottonId = id;
   document.getElementById('cottonLaborer').value = c.laborerId;
+  document.getElementById('cottonProduct').value = c.product||'Kapas';
   document.getElementById('cottonDate').value = c.date;
   document.getElementById('cottonWeight').value = c.weightKg;
   document.getElementById('cottonRate').value = c.ratePerKg;
@@ -1793,8 +1886,8 @@ function renderCottonList(){
   if(!el) return;
   el.innerHTML = cottonPicks.length ? cottonPicks.map(c=>`
     <div class="txn-row">
-      <div class="txn-ic expense">☁️</div>
-      <div class="txn-mid"><div class="t1">${c.laborerName} — ${c.weightKg}kg @ ₹${c.ratePerKg}/kg</div><div class="t2">${formatDate(c.date)}${c.note ? ' · '+escapeHtml(c.note) : ''}</div></div>
+      <div class="txn-ic expense">${(c.product||'Kapas')==='Kapas'?'☁️':'⚖️'}</div>
+      <div class="txn-mid"><div class="t1">${c.laborerName} — ${escapeHtml(c.product||'Kapas')} ${c.weightKg}kg @ ₹${c.ratePerKg}/kg</div><div class="t2">${formatDate(c.date)}${c.note ? ' · '+escapeHtml(c.note) : ''}</div></div>
       <div class="txn-amt expense">${fmtMoney(c.amount)}</div>
       <div class="txn-actions">
         <button class="txn-action-btn edit" title="Edit" onclick="editCottonPick('${c.id}')">✎</button>
@@ -1856,7 +1949,7 @@ function renderPaymentList(){
 // ---- Farm Dashboard Summary ----
 function renderFarmDashboard(){
   const now = new Date(); const thisKey = monthKey(now);
-  const cottonKgThisMonth = cottonPicks.filter(c=>monthKey(c.date)===thisKey).reduce((s,c)=>s+c.weightKg,0);
+  const cottonKgThisMonth = cottonPicks.filter(c=>monthKey(c.date)===thisKey && (c.product||'Kapas')==='Kapas').reduce((s,c)=>s+c.weightKg,0);
   const spentThisMonth = farmPayments.filter(p=>monthKey(p.date)===thisKey).reduce((s,p)=>s+p.amount,0);
   let totalDue = 0;
   laborers.forEach(l=>{ totalDue += getLaborerTotals(l.id).due; });
@@ -1870,6 +1963,113 @@ function renderFarmDashboard(){
   set('farmDashLaborers', laborers.length);
   set('farmDashCotton', cottonKgThisMonth.toLocaleString('en-IN')+' kg');
   set('farmDashDue', fmtMoney(totalDue));
+}
+
+// ---- Majdoor / Kapas detail modals (edit-delete wahin se) ----
+function ldRow(type, r, showName){
+  const editing = detailEdit && detailEdit.type===type && detailEdit.id===r.id;
+  if(editing){
+    let f = `<input type="date" id="ldeDate" value="${r.date}">`;
+    if(type==='work') f += `<input type="text" id="ldeDesc" value="${escapeHtml(r.description).replace(/"/g,'&quot;')}"><input type="number" id="ldeAmt" value="${r.amount}">`;
+    if(type==='cotton') f += `<input type="number" id="ldeKg" value="${r.weightKg}" placeholder="kg"><input type="number" id="ldeRate" value="${r.ratePerKg}" placeholder="₹/kg">`;
+    if(type==='payment') f += `<input type="number" id="ldeAmt" value="${r.amount}">`;
+    return `<div class="txn-row ld-edit" style="flex-direction:column;align-items:stretch;gap:8px;">${f}
+      <div style="display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="ldSave()">Update</button><button class="btn btn-ghost btn-sm" onclick="ldCancel()">Cancel</button></div></div>`;
+  }
+  const nm = showName ? escapeHtml(r.laborerName)+' — ' : '';
+  const title = type==='work' ? nm+escapeHtml(r.description)
+    : type==='cotton' ? `${nm}${escapeHtml(r.product||'Kapas')} ${r.weightKg}kg @ ₹${r.ratePerKg}/kg`
+    : nm+'Payment';
+  const ic = type==='work' ? '🧑‍🌾' : type==='cotton' ? ((r.product||'Kapas')==='Kapas'?'☁️':'⚖️') : '💵';
+  const cls = type==='payment' ? 'income' : 'expense';
+  return `<div class="txn-row">
+    <div class="txn-ic ${cls}">${ic}</div>
+    <div class="txn-mid"><div class="t1">${title}</div><div class="t2">${formatDate(r.date)}${r.note?' · '+escapeHtml(r.note):''}</div></div>
+    <div class="txn-amt ${cls}">${fmtMoney(r.amount)}</div>
+    <div class="txn-actions">
+      <button class="txn-action-btn edit" onclick="ldEdit('${type}','${r.id}')">✎</button>
+      <button class="txn-action-btn del" onclick="ldDelete('${type}','${r.id}','${r.linkedTxnId||''}')">✕</button>
+    </div></div>`;
+}
+window.ldEdit = function(type,id){ detailEdit={type,id}; refreshDetails(); }
+window.ldCancel = function(){ detailEdit=null; refreshDetails(); }
+window.ldDelete = function(type,id,linked){
+  if(type==='work') deleteFarmWork(id);
+  else if(type==='cotton') deleteCottonPick(id);
+  else deleteFarmPayment(id, linked);
+}
+window.ldSave = async function(){
+  if(!detailEdit) return;
+  const {type,id}=detailEdit;
+  const date=document.getElementById('ldeDate').value;
+  try{
+    if(type==='work'){
+      const description=document.getElementById('ldeDesc').value.trim();
+      const amount=parseFloat(document.getElementById('ldeAmt').value);
+      if(!description||!amount||amount<=0){ toast('Vivaran aur sahi rashi daalein.'); return; }
+      await updateDoc(doc(db,'farmWork',id),{description,amount,date});
+    } else if(type==='cotton'){
+      const weightKg=parseFloat(document.getElementById('ldeKg').value);
+      const ratePerKg=parseFloat(document.getElementById('ldeRate').value);
+      if(!weightKg||!ratePerKg){ toast('Kg aur rate daalein.'); return; }
+      await updateDoc(doc(db,'cottonPicks',id),{weightKg,ratePerKg,amount:Math.round(weightKg*ratePerKg*100)/100,date});
+    } else {
+      const amount=parseFloat(document.getElementById('ldeAmt').value);
+      if(!amount||amount<=0){ toast('Sahi rashi daalein.'); return; }
+      const p=farmPayments.find(x=>x.id===id);
+      await updateDoc(doc(db,'farmPayments',id),{amount,date});
+      if(p&&p.linkedTxnId){ try{ await updateDoc(doc(db,'transactions',p.linkedTxnId),{amount,date}); }catch(e){} }
+    }
+    detailEdit=null; toast('Update ho gaya ✓');
+  }catch(e){ toast('Save nahi hua: '+e.message); }
+}
+
+// ---- Majdoor detail modal ----
+window.openLaborerDetail = function(id){
+  closeCottonAll();
+  detailLaborerId=id; detailTab='work'; detailEdit=null;
+  document.getElementById('laborerDetailBg').style.display='flex';
+  renderLaborerDetail();
+}
+window.closeLaborerDetail = function(){
+  detailLaborerId=null; detailEdit=null;
+  document.getElementById('laborerDetailBg').style.display='none';
+}
+window.ldTab = function(t){ detailTab=t; detailEdit=null; renderLaborerDetail(); }
+function renderLaborerDetail(){
+  const l=laborers.find(x=>x.id===detailLaborerId);
+  if(!l){ closeLaborerDetail(); return; }
+  const t=getLaborerTotals(l.id);
+  document.getElementById('ldTitle').textContent = l.name + (l.phone?' · '+l.phone:'');
+  document.getElementById('ldSummary').innerHTML = `Kamaya <b class="mono">${fmtMoney(t.earned)}</b> · Mila <b class="mono">${fmtMoney(t.paid)}</b> · Baaki <b class="mono">${fmtMoney(t.due)}</b>`;
+  ['work','cotton','payment'].forEach(s=>{ document.getElementById('ldBtn_'+s).className='toggle-btn'+(s===detailTab?' active-generic':''); });
+  const src = detailTab==='work'?farmWork : detailTab==='cotton'?cottonPicks : farmPayments;
+  const rows = src.filter(r=>r.laborerId===l.id);
+  document.getElementById('ldBody').innerHTML = rows.length ? rows.map(r=>ldRow(detailTab,r,false)).join('') : `<div class="empty">Koi record nahi hai.</div>`;
+}
+
+// ---- Kapas / tudai ka poora record ----
+window.openCottonAll = function(){
+  closeLaborerDetail();
+  cottonAllOpen=true; detailEdit=null;
+  document.getElementById('cottonAllBg').style.display='flex';
+  renderCottonAll();
+}
+window.closeCottonAll = function(){
+  cottonAllOpen=false; detailEdit=null;
+  const e=document.getElementById('cottonAllBg'); if(e) e.style.display='none';
+}
+function renderCottonAll(){
+  const byProd={};
+  cottonPicks.forEach(c=>{ const k=c.product||'Kapas'; byProd[k]=byProd[k]||{kg:0,amt:0}; byProd[k].kg+=c.weightKg; byProd[k].amt+=c.amount; });
+  document.getElementById('caSummary').innerHTML = Object.keys(byProd).length
+    ? Object.entries(byProd).map(([k,v])=>`<div>${escapeHtml(k)}: <b class="mono">${v.kg.toLocaleString('en-IN')} kg</b> · <b class="mono">${fmtMoney(v.amt)}</b></div>`).join('')
+    : '';
+  document.getElementById('caBody').innerHTML = cottonPicks.length ? cottonPicks.map(r=>ldRow('cotton',r,true)).join('') : `<div class="empty">Abhi koi record nahi hai.</div>`;
+}
+function refreshDetails(){
+  if(detailLaborerId) renderLaborerDetail();
+  if(cottonAllOpen) renderCottonAll();
 }
 
 // ---------------- Udhaar Khata (Loans given / taken, with interest) ----------------
